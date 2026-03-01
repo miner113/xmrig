@@ -189,7 +189,7 @@ void xmrig::JunoRpcClient::setPool(const Pool &pool)
 
     // Set algorithm to rx/juno if not already set
     if (!m_pool.algorithm().isValid()) {
-        m_pool.setAlgo(Algorithm::RX_JUNO);
+        m_pool.setAlgo(Algorithm::RX_DRAGONX);
     }
 
     m_pollInterval = std::max<uint64_t>(1000, m_pool.pollInterval());
@@ -543,7 +543,7 @@ bool xmrig::JunoRpcClient::parseBlockTemplate(const rapidjson::Value &result)
     }
 
     // Create job
-    Job job(false, Algorithm::RX_JUNO, String());
+    Job job(false, Algorithm::RX_DRAGONX, String());
 
     // Build the 140-byte block header for hashing
     uint8_t header[140];
