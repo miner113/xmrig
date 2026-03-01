@@ -414,7 +414,7 @@ void xmrig::CpuWorker<N>::start()
 					
 #                   ifdef XMRIG_FEATURE_BENCHMARK
                     if (m_benchSize) {
-                        const uint64_t bench_value = *reinterpret_cast<uint64_t*>(m_hash + (i * 32) + 24);
+						
                         if (current_job_nonces[i] < m_benchSize) {
                             BenchState::add(value);
                         }
