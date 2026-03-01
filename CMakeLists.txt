@@ -92,6 +92,7 @@ set(HEADERS_CRYPTO
     src/crypto/common/MemoryPool.h
     src/crypto/common/Nonce.h
     src/crypto/common/portable/mm_malloc.h
+	src/crypto/common/SoloNonce.h
     src/crypto/common/VirtualMemory.h
    )
 
@@ -128,6 +129,7 @@ set(SOURCES_CRYPTO
     src/crypto/common/HugePagesInfo.cpp
     src/crypto/common/MemoryPool.cpp
     src/crypto/common/Nonce.cpp
+	src/crypto/common/SoloNonce.cpp
     src/crypto/common/VirtualMemory.cpp
    )
 

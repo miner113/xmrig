@@ -2,6 +2,8 @@
  * Copyright (c) 2018-2019 tevador     <tevador@gmail.com>
  * Copyright (c) 2018-2021 SChernykh   <https://github.com/SChernykh>
  * Copyright (c) 2016-2021 XMRig       <https://github.com/xmrig>, <support@xmrig.com>
+ * Copyright (c) 2022-2025 Duke Leto   <https://git.hush.is/duke>
+ * Copyright (c) 2025-2025 Miner113   <https://github.com/miner113>
  *
  *   This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -46,6 +48,9 @@ const RandomX_ConfigurationBase *xmrig::RxAlgo::base(Algorithm::Id algorithm)
 
     case Algorithm::RX_YADA:
         return &RandomX_YadaConfig;
+		
+	case Algorithm::RX_DRAGONX:
+        return &RandomX_DragonXConfig;
 
     default:
         break;

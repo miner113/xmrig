@@ -37,11 +37,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // Increase it if some configs use larger cache
 #define RANDOMX_CACHE_MAX_SIZE  268435456
 
-// Increase it if some configs use larger dataset
-#define RANDOMX_DATASET_MAX_SIZE  2181038080
+//  DragonX!
+#define RANDOMX_DATASET_MAX_SIZE  4294967296UL
 
-// Increase it if some configs use larger programs
-#define RANDOMX_PROGRAM_MAX_SIZE       280
+//  DragonX!
+#define RANDOMX_PROGRAM_MAX_SIZE       512
 
-// Increase it if some configs use larger scratchpad
-#define RANDOMX_SCRATCHPAD_L3_MAX_SIZE      2097152
+// DragonX!
+#define RANDOMX_SCRATCHPAD_L3_MAX_SIZE      4194304

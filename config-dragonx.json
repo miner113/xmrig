@@ -1,0 +1,26 @@
+{
+    "autosave": true,
+    "cpu": true,
+    "opencl": false,
+    "cuda": false,
+    "pools": [
+        {
+            "coin": "dragonx",
+            "algo": "rx/dragonx",
+            "url": "127.0.0.1:3333",
+            "user": "zs1ujhspzj65zu66s6wx40huh06prmdz00uk8cf5k97xrl53sfcnyqzn66zpvrn7wwaa4lq7cxftfp",
+            "pass": "x",
+            "keepalive": true,
+            "nicehash": false
+        }
+    ],
+    "randomx": {
+        "mode": "auto",
+        "1gb-pages": false,
+        "cache_qos": false
+    },
+    "log-file": "dragonxrig.log",
+    "print-time": 60,
+    "retries": 5,
+    "retry-pause": 5
+}

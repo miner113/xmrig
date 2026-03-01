@@ -2,6 +2,8 @@
  * Copyright (c) 2018      Lee Clagett <https://github.com/vtnerd>
  * Copyright (c) 2018-2021 SChernykh   <https://github.com/SChernykh>
  * Copyright (c) 2016-2021 XMRig       <https://github.com/xmrig>, <support@xmrig.com>
+ * Copyright (c) 2022-2025 Duke Leto   <https://git.hush.is/duke>
+ * Copyright (c) 2025-2025 Miner113   <https://github.com/miner113>
  *
  *   This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -82,6 +84,7 @@ const char *Algorithm::kRX_ARQ          = "rx/arq";
 const char *Algorithm::kRX_GRAFT        = "rx/graft";
 const char *Algorithm::kRX_SFX          = "rx/sfx";
 const char *Algorithm::kRX_YADA         = "rx/yada";
+const char *Algorithm::kRX_DRAGONX      = "rx/dragonx";
 #endif
 
 #ifdef XMRIG_ALGO_ARGON2
@@ -148,6 +151,7 @@ static const std::map<uint32_t, const char *> kAlgorithmNames = {
     ALGO_NAME(RX_GRAFT),
     ALGO_NAME(RX_SFX),
     ALGO_NAME(RX_YADA),
+	ALGO_NAME(RX_DRAGONX),
 #   endif
 
 #   ifdef XMRIG_ALGO_ARGON2
@@ -263,6 +267,9 @@ static const std::map<const char *, Algorithm::Id, aliasCompare> kAlgorithmAlias
                                     ALGO_ALIAS(RX_SFX,          "randomsfx"),
     ALGO_ALIAS_AUTO(RX_YADA),       ALGO_ALIAS(RX_YADA,         "randomx/yada"),
                                     ALGO_ALIAS(RX_YADA,         "randomyada"),
+	ALGO_ALIAS_AUTO(RX_DRAGONX),    ALGO_ALIAS(RX_DRAGONX,      "randomx/dragonx"),
+                                    ALGO_ALIAS(RX_DRAGONX,      "randomdragonx"),
+                                    ALGO_ALIAS(RX_DRAGONX,      "dragonx"),
 #   endif
 
 #   ifdef XMRIG_ALGO_ARGON2
@@ -350,7 +357,7 @@ std::vector<xmrig::Algorithm> xmrig::Algorithm::all(const std::function<bool(con
         CN_HEAVY_0, CN_HEAVY_TUBE, CN_HEAVY_XHV,
         CN_PICO_0, CN_PICO_TLO,
         CN_UPX2,
-        RX_0, RX_WOW, RX_ARQ, RX_GRAFT, RX_SFX, RX_YADA,
+        RX_0, RX_WOW, RX_ARQ, RX_GRAFT, RX_SFX, RX_YADA, RX_DRAGONX,
         AR2_CHUKWA, AR2_CHUKWA_V2, AR2_WRKZ,
         KAWPOW_RVN,
         GHOSTRIDER_RTM

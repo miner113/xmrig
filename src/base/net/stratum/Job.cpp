@@ -9,6 +9,8 @@
  * Copyright 2019      Howard Chu  <https://github.com/hyc>
  * Copyright 2018-2024 SChernykh   <https://github.com/SChernykh>
  * Copyright 2016-2024 XMRig       <https://github.com/xmrig>, <support@xmrig.com>
+ * Copyright 2022-2025 Duke Leto   <https://git.hush.is/duke>
+ * Copyright 2025-2025 Miner113    <https://github.com/miner113>
  *
  *   This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -91,6 +93,102 @@ bool xmrig::Job::setBlob(const char *blob)
     return true;
 }
 
+bool xmrig::Job::setZcashJob(const char *version, const char *prevHash, const char *merkleRoot,
+                             const char *blockCommitments, uint32_t time, const char *bits)
+{
+    // Construct 108-byte Dragonx header (without nonce)
+    // Format: version(4) + prevHash(32) + merkleRoot(32) + blockCommitments(32) + time(4) + bits(4)
+    //
+    // IMPORTANT: The hash fields (prevHash, merkleRoot, blockCommitments) from getblocktemplate
+    // are in DISPLAY order (big-endian). For hashing, they must be converted to INTERNAL order
+    // (little-endian), which means byte-reversing each 32-byte hash.
+	
+    if (!version || !prevHash || !merkleRoot || !blockCommitments || !bits) {
+        return false;
+    }
+
+    // Clear the blob
+    memset(m_blob, 0, sizeof(m_blob));
+    size_t pos = 0;
+
+    // Parse version (4 bytes, little-endian)
+    uint32_t ver = static_cast<uint32_t>(strtoul(version, nullptr, 16));
+    memcpy(m_blob + pos, &ver, 4);
+    pos += 4;
+
+    // Parse prevHash (32 bytes) - must reverse from display to internal order
+    if (strlen(prevHash) != 64) {
+        return false;
+    }
+	 {
+        uint8_t temp[32];
+        if (!Cvt::fromHex(temp, 32, prevHash, 64)) {
+            return false;
+        }
+        // Reverse bytes: display order -> internal order
+        for (int i = 0; i < 32; ++i) {
+            m_blob[pos + i] = temp[31 - i];
+        }
+    }
+    pos += 32;
+
+    // Parse merkleRoot (32 bytes) - must reverse from display to internal order
+    if (strlen(merkleRoot) != 64) {
+        return false;
+    }
+	{
+        uint8_t temp[32];
+        if (!Cvt::fromHex(temp, 32, merkleRoot, 64)) {
+            return false;
+        }
+        // Reverse bytes: display order -> internal order
+        for (int i = 0; i < 32; ++i) {
+            m_blob[pos + i] = temp[31 - i];
+        }
+    }
+    pos += 32;
+
+    // Parse blockCommitments (32 bytes) - must reverse from display to internal order
+    if (strlen(blockCommitments) != 64) {
+        return false;
+    }
+	{
+        uint8_t temp[32];
+        if (!Cvt::fromHex(temp, 32, blockCommitments, 64)) {
+            return false;
+        }
+        // Reverse bytes: display order -> internal order
+        for (int i = 0; i < 32; ++i) {
+            m_blob[pos + i] = temp[31 - i];
+        }
+    }
+    pos += 32;
+
+    // Add time (4 bytes, little-endian)
+    memcpy(m_blob + pos, &time, 4);
+    pos += 4;
+
+    // Parse bits (4 bytes, little-endian)
+    uint32_t nBits = static_cast<uint32_t>(strtoul(bits, nullptr, 16));
+    memcpy(m_blob + pos, &nBits, 4);
+    pos += 4;
+
+    // pos should now be 108 (the nonce offset for Dragonx)
+    // The 32-byte nonce will be at offset 108
+    // Total blob size for mining will be 140 bytes (108 + 32)
+
+    m_size = 140; // Full size including space for 32-byte nonce
+
+    return true;
+}
+
+void xmrig::Job::setJunoHeader(const uint8_t *header108)
+{
+    // Directly copy the 108-byte header (without nonce) into m_blob
+    memset(m_blob, 0, sizeof(m_blob));
+    memcpy(m_blob, header108, 108);
+    m_size = 140; // 108 + 32-byte nonce space
+}
 
 bool xmrig::Job::setSeedHash(const char *hash)
 {
@@ -169,6 +267,10 @@ size_t xmrig::Job::nonceOffset() const
         return 147;
     }
 
+    // Dragonx: 32-byte nonce at offset 108
+    if (algorithm() == Algorithm::RX_DRAGONX) {
+        return 108;
+    }
     return 39;
 }
 
@@ -276,6 +378,7 @@ void xmrig::Job::copy(const Job &other)
 #   endif
 
     m_hasMinerSignature = other.m_hasMinerSignature;
+	m_isSoloMining      = other.m_isSoloMining;
 }
 
 
@@ -332,6 +435,7 @@ void xmrig::Job::move(Job &&other)
 #   endif
 
     m_hasMinerSignature = other.m_hasMinerSignature;
+	m_isSoloMining      = other.m_isSoloMining;
 }
 
 

@@ -9,6 +9,8 @@
  * Copyright 2019      Howard Chu  <https://github.com/hyc>
  * Copyright 2018-2025 SChernykh   <https://github.com/SChernykh>
  * Copyright 2016-2025 XMRig       <https://github.com/xmrig>, <support@xmrig.com>
+ * Copyright 2022-2025 Duke Leto   <https://git.hush.is/duke>
+ * Copyright 2025-2025 Miner113   <https://github.com/miner113>
  *
  *   This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -59,6 +61,9 @@ public:
     bool isEqual(const Job &other) const;
     bool isEqualBlob(const Job &other) const;
     bool setBlob(const char *blob);
+	bool setZcashJob(const char *version, const char *prevHash, const char *merkleRoot,
+                     const char *blockCommitments, uint32_t time, const char *bits);
+	void setJunoHeader(const uint8_t *header108);  // Set 108-byte Juno header directly
     bool setSeedHash(const char *hash);
     bool setTarget(const char *target);
     size_t nonceOffset() const;
@@ -76,7 +81,10 @@ public:
     inline const String &poolWallet() const             { return m_poolWallet; }
     inline const uint32_t *nonce() const                { return reinterpret_cast<const uint32_t*>(m_blob + nonceOffset()); }
     inline const uint8_t *blob() const                  { return m_blob; }
-    inline size_t nonceSize() const                     { return (algorithm().family() == Algorithm::KAWPOW) ?  8 :  4; }
+    inline size_t nonceSize() const                     {
+        if (algorithm() == Algorithm::RX_DRAGONX) return 32;
+        return (algorithm().family() == Algorithm::KAWPOW) ?  8 :  4;
+    }
     inline size_t size() const                          { return m_size; }
     inline uint32_t *nonce()                            { return reinterpret_cast<uint32_t*>(m_blob + nonceOffset()); }
     inline uint32_t backend() const                     { return m_backend; }
@@ -96,6 +104,11 @@ public:
     inline void setHeight(uint64_t height)              { m_height = height; }
     inline void setIndex(uint8_t index)                 { m_index = index; }
     inline void setPoolWallet(const String &poolWallet) { m_poolWallet = poolWallet; }
+	inline void setTarget64(uint64_t target)            { m_target = target; m_diff = toDiff(target); }
+
+    // Solo mining support
+    inline bool isSoloMining() const                    { return m_isSoloMining; }
+    inline void setSoloMining(bool solo)                { m_isSoloMining = solo; }
 
 #   ifdef XMRIG_PROXY_PROJECT
     inline char *rawBlob()                              { return m_rawBlob; }
@@ -161,6 +174,7 @@ private:
     uint64_t m_target   = 0;
     uint8_t m_blob[kMaxBlobSize]{ 0 };
     uint8_t m_index     = 0;
+	bool m_isSoloMining = false;
 
 #   ifdef XMRIG_PROXY_PROJECT
     char m_rawBlob[kMaxBlobSize * 2 + 8]{};

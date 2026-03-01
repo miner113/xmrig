@@ -1,0 +1,127 @@
+name: Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libuv1-dev libssl-dev libhwloc-dev
+
+      - name: Build
+        run: |
+          mkdir build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          make -j$(nproc)
+
+      - name: Package
+        run: |
+          cd build
+          tar -czvf xmrig-${{ github.ref_name }}-linux-x64.tar.gz xmrig
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/xmrig-${{ github.ref_name }}-linux-x64.tar.gz
+
+  build-macos-arm64:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install cmake libuv openssl hwloc
+
+      - name: Build
+        run: |
+          mkdir build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DOPENSSL_ROOT_DIR=$(brew --prefix openssl)
+          make -j$(sysctl -n hw.ncpu)
+
+      - name: Package
+        run: |
+          cd build
+          tar -czvf xmrig-${{ github.ref_name }}-macos-arm64.tar.gz xmrig
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/xmrig-${{ github.ref_name }}-macos-arm64.tar.gz
+
+  build-macos-x64:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install x86_64 Homebrew and dependencies
+        run: |
+          arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          arch -x86_64 /usr/local/bin/brew install cmake libuv openssl hwloc
+
+      - name: Build
+        run: |
+          mkdir build && cd build
+          arch -x86_64 /usr/local/bin/cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+            -DCMAKE_PREFIX_PATH=/usr/local \
+            -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl \
+            -DUV_LIBRARY=/usr/local/lib/libuv.a \
+            -DUV_INCLUDE_DIR=/usr/local/include \
+            -DHWLOC_LIBRARY=/usr/local/lib/libhwloc.dylib \
+            -DHWLOC_INCLUDE_DIR=/usr/local/include
+          arch -x86_64 make -j$(sysctl -n hw.ncpu)
+
+      - name: Package
+        run: |
+          cd build
+          tar -czvf xmrig-${{ github.ref_name }}-macos-x64.tar.gz xmrig
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/xmrig-${{ github.ref_name }}-macos-x64.tar.gz
+
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone xmrig-deps
+        run: git clone --depth 1 https://github.com/xmrig/xmrig-deps.git C:\xmrig-deps
+
+      - name: Configure CMake
+        run: |
+          mkdir build
+          cd build
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DXMRIG_DEPS=C:\xmrig-deps\msvc2022\x64
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        shell: cmd
+        run: |
+          cd build\Release
+          7z a xmrig-${{ github.ref_name }}-win64.zip xmrig.exe WinRing0x64.sys *.cmd
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/Release/xmrig-${{ github.ref_name }}-win64.zip

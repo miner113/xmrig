@@ -38,6 +38,33 @@
 #include "crypto/rx/RxVm.h"
 #include "crypto/ghostrider/ghostrider.h"
 #include "net/JobResults.h"
+#ifdef XMRIG_FEATURE_TLS
+#   include <openssl/sha.h>
+#else
+// Standalone SHA-256 for non-TLS builds
+#   ifdef _WIN32
+#       include <windows.h>
+#       include <bcrypt.h>
+static void SHA256(const uint8_t* data, size_t len, uint8_t* out) {
+    BCRYPT_ALG_HANDLE hAlg = nullptr;
+    BCRYPT_HASH_HANDLE hHash = nullptr;
+    BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_SHA256_ALGORITHM, nullptr, 0);
+    BCryptCreateHash(hAlg, &hHash, nullptr, 0, nullptr, 0, 0);
+    BCryptHashData(hHash, const_cast<PUCHAR>(data), static_cast<ULONG>(len), 0);
+    BCryptFinishHash(hHash, out, 32, 0);
+    BCryptDestroyHash(hHash);
+    BCryptCloseAlgorithmProvider(hAlg, 0);
+}
+#   else
+#       include "crypto/ghostrider/sph_sha2.h"
+static void SHA256(const uint8_t* data, size_t len, uint8_t* out) {
+    sph_sha256_context ctx;
+    sph_sha256_init(&ctx);
+    sph_sha256(&ctx, data, len);
+    sph_sha256_close(&ctx, out);
+}
+#   endif
+#endif
 
 
 #ifdef XMRIG_ALGO_RANDOMX
@@ -53,6 +80,42 @@
 namespace xmrig {
 
 static constexpr uint32_t kReserveCount = 32768;
+
+
+// ── DRAGONX Cash PoW hash ────────────────────────────────────────────────────────
+//
+// DRAGONX block difficulty is checked against double_sha256(173-byte header),
+// NOT the RandomX hash directly (unlike Monero).
+//
+// Full 173-byte header structure (from DRAGONX miner.cpp / miner.h):
+//   [0:108]   header_base  = version(4) + prevhash(32) + merkle(32)
+//                          + commitments(32) + time(4) + bits(4)
+//   [108:140] nonce        = 32-byte miner nonce
+//   [140]     0x20         = compact_size for 32-byte solution
+//   [141:173] rx_solution  = RandomX hash result (32 bytes)
+//
+// This matches CBlockHeader::GetHash() in the DRAGONX daemon source.
+//
+// @param blob      140-byte header WITH nonce already at bytes [108:140]
+// @param rx_hash   32-byte RandomX hash result
+// @param out       32-byte output buffer for double_sha256
+//
+
+
+
+static inline void dragonx_pow_hash(const uint8_t* blob, const uint8_t* rx_hash, uint8_t* out)
+{
+    uint8_t full_header[173];
+    memcpy(full_header,        blob,    140);   // header (108 bytes) + nonce (32 bytes)
+    full_header[140] = 0x20;                    // compact_size = 32 (solution length)
+    memcpy(full_header + 141,  rx_hash, 32);    // RandomX hash = the PoW solution
+
+    // double SHA256 = SHA256(SHA256(full_header))
+    uint8_t tmp[32];
+    SHA256(full_header, 173, tmp);
+    SHA256(tmp,          32, out);
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 
 #ifdef XMRIG_ALGO_CN_HEAVY
@@ -267,8 +330,18 @@ void xmrig::CpuWorker<N>::start()
             }
 
             uint32_t current_job_nonces[N];
+            alignas(8) uint8_t current_solo_nonces[N * 32];
             for (size_t i = 0; i < N; ++i) {
                 current_job_nonces[i] = readUnaligned(m_job.nonce(i));
+                // Save solo nonces BEFORE they get incremented by nextRound()
+                if (m_job.isSoloMining()) {
+                    memcpy(current_solo_nonces + i * 32, m_job.soloNonce(i), 32);
+                }
+                // For RX_DRAGONX stratum, also save full 32-byte nonce from blob
+                // (proxy may have set fixed byte that we need to preserve)
+                else if (job.algorithm() == Algorithm::RX_DRAGONX) {
+                    memcpy(current_solo_nonces + i * 32, m_job.blob() + m_job.nonceOffset() + i * job.size(), 32);
+                }
             }
 
 #           ifdef XMRIG_FEATURE_BENCHMARK
@@ -338,17 +411,54 @@ void xmrig::CpuWorker<N>::start()
             if (valid) {
                 for (size_t i = 0; i < N; ++i) {
                     const uint64_t value = *reinterpret_cast<uint64_t*>(m_hash + (i * 32) + 24);
-
+					
 #                   ifdef XMRIG_FEATURE_BENCHMARK
                     if (m_benchSize) {
+                        const uint64_t bench_value = *reinterpret_cast<uint64_t*>(m_hash + (i * 32) + 24);
                         if (current_job_nonces[i] < m_benchSize) {
                             BenchState::add(value);
                         }
+                        continue;
                     }
-                    else
 #                   endif
-                    if (value < job.target()) {
-                        JobResults::submit(job, current_job_nonces[i], m_hash + (i * 32), job.hasMinerSignature() ? miner_signature_saved : nullptr);
+
+                    if (job.algorithm() == Algorithm::RX_DRAGONX) {
+                        // ── DRAGONX: use double_sha256(173-byte header) for difficulty ──
+                        //
+                        // The DRAGONX daemon checks GetHash() = double_sha256(173 bytes) < target,
+                        // NOT the RandomX hash directly. We must filter shares the same way
+                        // so that every submitted share is a genuine block candidate.
+                        //
+                        // Reconstruct the 140-byte blob that was ACTUALLY hashed this round:
+                        //   - bytes  [0:108] are unchanged by nextRound() (only nonce changes)
+                        //   - bytes [108:140] = saved nonce (current_solo_nonces, before nextRound)
+                        uint8_t blob_for_header[140];
+                        memcpy(blob_for_header,       m_job.blob(),                    108); // header base (unchanged)
+                        memcpy(blob_for_header + 108, current_solo_nonces + i * 32,    32);  // saved 32-byte nonce
+
+                        // Compute DRAGONX PoW hash: double_sha256(blob[140] + 0x20 + rx_hash[32])
+                        alignas(8) uint8_t pow_hash[32];
+                        dragonx_pow_hash(blob_for_header, m_hash + (i * 32), pow_hash);
+
+                        // Compare last 8 bytes of pow_hash (same field as XMRig's standard check)
+                        const uint64_t pow_value = *reinterpret_cast<uint64_t*>(pow_hash + 24);
+                        if (pow_value < job.target()) {
+                            // Submit full 32-byte nonce + rx_hash as result
+                            // Pool validates: randomx(blob, seed) == rx_hash (PoW authenticity)
+                            // Pool also checks: double_sha256(173 bytes) < networkTarget (block detection)
+                            JobResults::submit(JobResult(job, current_solo_nonces + i * 32, m_hash + (i * 32)));
+                        }
+                    } else {
+                        // ── Standard XMRig path (Monero, CryptoNight, etc.) ──
+                        const uint64_t value = *reinterpret_cast<uint64_t*>(m_hash + (i * 32) + 24);
+                        if (value < job.target()) {
+                            if (m_job.isSoloMining()) {
+                                // Solo mining: submit with full 256-bit nonce
+                                JobResults::submit(JobResult(job, current_solo_nonces + i * 32, m_hash + (i * 32)));
+                            } else {
+                                JobResults::submit(job, current_job_nonces[i], m_hash + (i * 32), job.hasMinerSignature() ? miner_signature_saved : nullptr);
+                            }
+                        }
                     }
                 }
                 m_count += N;
@@ -369,6 +479,11 @@ void xmrig::CpuWorker<N>::start()
 template<size_t N>
 bool xmrig::CpuWorker<N>::nextRound()
 {
+    // Solo mining uses its own 256-bit nonce management
+    if (m_job.isSoloMining()) {
+        return m_job.nextRoundSolo();
+    }
+
 #   ifdef XMRIG_FEATURE_BENCHMARK
     const uint32_t count = m_benchSize ? 1U : kReserveCount;
 #   else
@@ -515,6 +630,14 @@ void xmrig::CpuWorker<N>::consumeJob()
 #   endif
 
     m_job.add(job, count, Nonce::CPU);
+
+    // Handle solo mining nonce initialization
+    if (job.isSoloMining()) {
+        m_job.setSoloMining(true);
+        m_job.initSoloNonces();
+    } else {
+        m_job.setSoloMining(false);
+    }
 
 #   ifdef XMRIG_ALGO_RANDOMX
     if (m_job.currentJob().algorithm().family() == Algorithm::RANDOM_X) {

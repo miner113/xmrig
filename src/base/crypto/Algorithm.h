@@ -2,6 +2,8 @@
  * Copyright (c) 2018      Lee Clagett <https://github.com/vtnerd>
  * Copyright (c) 2018-2021 SChernykh   <https://github.com/SChernykh>
  * Copyright (c) 2016-2021 XMRig       <https://github.com/xmrig>, <support@xmrig.com>
+ * Copyright (c) 2022-2025 Duke Leto   <https://git.hush.is/duke>
+ * Copyright (c) 2025-2025 Miner113   <https://github.com/miner113>
  *
  *   This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -78,6 +80,7 @@ public:
         RX_GRAFT        = 0x72151267,   // "rx/graft"         RandomGRAFT (Graft).
         RX_SFX          = 0x72151273,   // "rx/sfx"           RandomSFX (Safex Cash).
         RX_YADA         = 0x72151279,   // "rx/yada"          RandomYada (YadaCoin).
+		RX_DRAGONX      = 0x72151264,   // "rx/dragonx"       RandomDragonX (DRAGONX).
         AR2_CHUKWA      = 0x61130000,   // "argon2/chukwa"    Argon2id (Chukwa).
         AR2_CHUKWA_V2   = 0x61140000,   // "argon2/chukwav2"  Argon2id (Chukwa v2).
         AR2_WRKZ        = 0x61120000,   // "argon2/wrkz"      Argon2id (WRKZ)
@@ -144,6 +147,7 @@ public:
     static const char *kRX_GRAFT;
     static const char *kRX_SFX;
     static const char *kRX_YADA;
+	static const char *kRX_DRAGONX;
 #   endif
 
 #   ifdef XMRIG_ALGO_ARGON2

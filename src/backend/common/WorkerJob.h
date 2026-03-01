@@ -32,6 +32,7 @@
 #include "base/net/stratum/Job.h"
 #include "base/tools/Alignment.h"
 #include "crypto/common/Nonce.h"
+#include "crypto/common/SoloNonce.h"
 
 
 namespace xmrig {
@@ -89,6 +90,29 @@ public:
     inline int32_t nonceOffset() const { return currentJob().nonceOffset(); }
     inline size_t nonceSize() const { return currentJob().nonceSize(); }
 
+// Solo mining nonce management
+    inline bool isSoloMining() const { return m_isSoloMining; }
+    inline void setSoloMining(bool solo) { m_isSoloMining = solo; }
+    inline uint8_t* soloNonce(size_t i = 0) { return m_soloNonces[index()] + i * 32; }
+    inline const uint8_t* soloNonce(size_t i = 0) const { return m_soloNonces[index()] + i * 32; }
+
+    inline void initSoloNonces() {
+        for (size_t i = 0; i < N; ++i) {
+            SoloNonce::initialize(soloNonce(i));
+            // Copy to blob at nonce offset
+            SoloNonce::copyToBlob(blob() + (i * currentJob().size()) + nonceOffset(), 0, soloNonce(i));
+        }
+    }
+
+    inline bool nextRoundSolo() {
+        for (size_t i = 0; i < N; ++i) {
+            SoloNonce::increment(soloNonce(i));
+            // Copy to blob at nonce offset
+            SoloNonce::copyToBlob(blob() + (i * currentJob().size()) + nonceOffset(), 0, soloNonce(i));
+        }
+        return true;  // Never exhausted with 256-bit nonces
+    }
+	
 private:
     inline uint64_t nonceMask() const     { return m_nonce_mask[index()]; }
 
@@ -115,6 +139,10 @@ private:
     uint64_t m_nonce_mask[2] = { 0, 0 };
     uint64_t m_sequence  = 0;
     uint8_t m_index      = 0;
+		
+    // Solo mining nonces (32 bytes per job slot per N)
+    alignas(8) uint8_t m_soloNonces[2][32 * N]{};
+    bool m_isSoloMining = false;
 };
 
 

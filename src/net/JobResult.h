@@ -66,6 +66,17 @@ public:
             m_hasMinerSignature = true;
             memcpy(m_minerSignature, miner_signature, sizeof(m_minerSignature));
         }
+
+        // For RX_DRAGONX, use 32-byte nonce but only first 8 bytes are varied
+        // The rest should be zeros (as they were in the original blob)
+        if (job.algorithm() == Algorithm::RX_DRAGONX) {
+            m_nonceSize = 32;
+            memset(m_nonceBytes, 0, 32);  // Clear all 32 bytes first
+            memcpy(m_nonceBytes, &nonce, sizeof(uint64_t));  // Write actual nonce to first 8 bytes
+        } else {
+            m_nonceSize = 4;
+            memcpy(m_nonceBytes, &nonce, sizeof(uint32_t));
+        }
     }
 
     inline JobResult(const Job &job) :
@@ -79,6 +90,22 @@ public:
     {
     }
 
+    // Constructor for solo mining with full 32-byte nonce
+    inline JobResult(const Job &job, const uint8_t *nonce32, const uint8_t *result) :
+        algorithm(job.algorithm()),
+        index(job.index()),
+        clientId(job.clientId()),
+        jobId(job.id()),
+        backend(job.backend()),
+        nonce(0),
+        diff(job.diff()),
+        m_isSoloResult(true)
+    {
+        memcpy(m_result, result, sizeof(m_result));
+        memcpy(m_nonceBytes, nonce32, 32);
+        m_nonceSize = 32;
+    }
+
     inline const uint8_t *result() const     { return m_result; }
     inline uint64_t actualDiff() const       { return Job::toDiff(reinterpret_cast<const uint64_t*>(m_result)[3]); }
     inline uint8_t *result()                 { return m_result; }
@@ -86,7 +113,13 @@ public:
     inline const uint8_t *mixHash() const    { return m_mixHash; }
 
     inline const uint8_t *minerSignature() const { return m_hasMinerSignature ? m_minerSignature : nullptr; }
-
+    inline const uint8_t *nonceBytes() const { return m_nonceBytes; }
+    inline size_t nonceSize() const          { return m_nonceSize; }
+	
+	// Solo mining support
+    inline bool isSoloResult() const         { return m_isSoloResult; }
+    inline const uint8_t *soloNonce() const  { return m_nonceBytes; }
+	
     const Algorithm algorithm;
     const uint8_t index;
     const String clientId;
@@ -102,6 +135,9 @@ private:
 
     uint8_t m_minerSignature[64] = { 0 };
     bool m_hasMinerSignature = false;
+	uint8_t m_nonceBytes[32] = { 0 };
+    size_t m_nonceSize = 4;
+	bool m_isSoloResult = false;
 };
 
 

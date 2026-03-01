@@ -2,6 +2,8 @@
  * Copyright (c) 2019      jtgrassie   <https://github.com/jtgrassie>
  * Copyright (c) 2018-2024 SChernykh   <https://github.com/SChernykh>
  * Copyright (c) 2016-2024 XMRig       <https://github.com/xmrig>, <support@xmrig.com>
+ * Copyright (c) 2022-2025 Duke Leto   <https://git.hush.is/duke>
+ * Copyright (c) 2025-2025 Miner113   <https://github.com/miner113>
  *
  *   This program is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -81,7 +83,7 @@ xmrig::Client::Client(int id, const char *agent, IClientListener *listener) :
     BaseClient(id, listener),
     m_agent(agent),
     m_sendBuf(1024),
-    m_tempBuf(256)
+    m_tempBuf(512)  // Increased for RX_DRAGONX 32-byte nonce support
 {
     m_reader.setListener(this);
     m_key = m_storage.add(this);
@@ -196,11 +198,17 @@ int64_t xmrig::Client::submit(const JobResult &result)
     const char *nonce = result.nonce;
     const char *data  = result.result;
 #   else
+	
+	// For RX_DRAGONX, nonce is 32 bytes (64 hex chars), otherwise 4 bytes (8 hex chars)
+    const size_t nonceHexSize = result.nonceSize() * 2 + 1;
+    const size_t dataOffset = (nonceHexSize + 7) & ~7; // Align to 8 bytes
+    const size_t sigOffset = dataOffset + 72;
+	
     char *nonce = m_tempBuf.data();
-    char *data  = m_tempBuf.data() + 16;
-    char *signature = m_tempBuf.data() + 88;
+    char *data  = m_tempBuf.data() + dataOffset;
+    char *signature = m_tempBuf.data() + sigOffset;
 
-    Cvt::toHex(nonce, sizeof(uint32_t) * 2 + 1, reinterpret_cast<const uint8_t *>(&result.nonce), sizeof(uint32_t));
+     Cvt::toHex(nonce, nonceHexSize, result.nonceBytes(), result.nonceSize());
     Cvt::toHex(data, 65, result.result(), 32);
 
     if (result.minerSignature()) {
@@ -798,6 +806,67 @@ void xmrig::Client::parseNotification(const char *method, const rapidjson::Value
         }
         else {
             close();
+        }
+
+        return;
+    }
+
+    // Handle Zcash-style mining.notify for Dragonx
+    if (strcmp(method, "mining.notify") == 0 && m_pool.algorithm() == Algorithm::RX_DRAGONX) {
+        if (!params.IsArray() || params.Size() < 9) {
+            LOG_ERR("%s " RED("invalid mining.notify params"), tag());
+            close();
+            return;
+        }
+
+        Job job(has<EXT_NICEHASH>(), m_pool.algorithm(), m_rpcId);
+
+        // Parse Zcash-style params array
+        // [job_id, version, prevhash, merkleroot, blockcommitments, time, bits, clean_jobs, seed_hash]
+        const char *jobId = params[0].GetString();
+        const char *version = params[1].GetString();
+        const char *prevHash = params[2].GetString();
+        const char *merkleRoot = params[3].GetString();
+        const char *blockCommitments = params[4].GetString();
+        const char *timeStr = params[5].GetString();
+        const char *bits = params[6].GetString();
+        bool cleanJobs = params[7].GetBool();
+        const char *seedHash = params[8].GetString();
+
+        (void)cleanJobs; // TODO: Use cleanJobs to signal miners to abandon current work
+
+        uint32_t time = static_cast<uint32_t>(strtoul(timeStr, nullptr, 16));
+
+        if (!job.setId(jobId)) {
+            LOG_ERR("%s " RED("invalid job_id"), tag());
+            close();
+            return;
+        }
+
+        if (!job.setZcashJob(version, prevHash, merkleRoot, blockCommitments, time, bits)) {
+            LOG_ERR("%s " RED("failed to construct Dragonx job"), tag());
+            close();
+            return;
+        }
+
+        if (!job.setSeedHash(seedHash)) {
+            LOG_ERR("%s " RED("invalid seed_hash"), tag());
+            close();
+            return;
+        }
+
+        // Set target from difficulty (will be set by pool via mining.set_difficulty)
+        // For now, use a default target
+        if (!job.setTarget("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")) {
+            job.setDiff(1); // Default difficulty
+        }
+
+        m_job.setClientId(m_rpcId);
+
+        if (m_job != job) {
+            m_jobs++;
+            m_job = std::move(job);
+            m_listener->onJobReceived(this, m_job, params);
         }
 
         return;
