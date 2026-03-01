@@ -241,7 +241,7 @@ xmrig::IClient *xmrig::Pool::createClient(int id, IClientListener *listener) con
     }
 #   ifdef XMRIG_FEATURE_HTTP
     else if (m_mode == MODE_DAEMON) {
-        if (m_algorithm == Algorithm::RX_JUNO) {
+        if (m_algorithm == Algorithm::RX_DRAGONX) {
             client = new JunoRpcClient(id, listener);
         } else {
             client = new DaemonClient(id, listener);
